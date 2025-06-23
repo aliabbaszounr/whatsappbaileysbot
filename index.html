@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>WhatsApp Bot Admin</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: "#16a085",
+            "primary-dark": "#12876f",
+            error: "#e74c3c",
+            bg: "#f7fafb",
+            panel: "#fff",
+            border: "#e0e0e0",
+            muted: "#757575",
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-bg min-h-screen flex flex-col">
+  <div class="flex min-h-screen">
+    <!-- Sidebar -->
+    <aside id="sidebar"
+      class="w-64 bg-white border-r border-border flex flex-col py-8 px-4 min-h-screen fixed md:static z-30 transition-all duration-300 -left-64 md:left-0"
+      style="top:0; bottom:0;">
+      <div class="flex items-center justify-between">
+        <h1 class="text-2xl font-bold text-primary-dark mb-8">WhatsApp Bot</h1>
+        <button id="closeSidebarBtn" class="block md:hidden text-3xl text-primary-dark mb-8 focus:outline-none" aria-label="Close Sidebar" style="margin-left:auto;">&times;</button>
+      </div>
+      <nav class="flex flex-col gap-2">
+        <button id="nav-connection" class="py-2 px-4 rounded font-semibold text-left hover:bg-primary/10 transition mb-1 bg-primary/10 text-primary-dark" onclick="showSection('connection')">
+          Connection
+        </button>
+        <button id="nav-autoresponder" class="py-2 px-4 rounded font-semibold text-left hover:bg-primary/10 transition text-gray-700" onclick="showSection('autoresponder')">
+          Auto-Responder
+        </button>
+      </nav>
+      <div class="flex-1"></div>
+      <div class="border-t border-border pt-4 mt-4 text-xs text-muted">
+        &copy; 2025 WhatsApp Bot
+      </div>
+    </aside>
+    <!-- Mobile menu bar -->
+    <button id="menuBarsBtn" class="fixed top-4 left-4 z-40 w-10 h-10 rounded-full flex items-center justify-center bg-primary text-white shadow-lg md:hidden"
+      aria-label="Open Sidebar">
+      <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2"
+        viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round"
+          d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+    <!-- Main Content -->
+    <main class="flex-1 ml-0 md:ml-64 flex justify-center items-start pt-12 pb-8 px-2 md:px-0 w-full">
+      <div class="w-full max-w-xl bg-panel shadow-lg rounded-xl p-6 md:p-9 mt-4">
+        <!-- Connection Section -->
+        <section id="section-connection" class="">
+          <h2 class="text-xl font-semibold text-primary-dark mb-4">WhatsApp Connection</h2>
+          <div class="flex items-center gap-2 mb-3">
+            <span id="status-dot" class="inline-block w-3 h-3 rounded-full bg-error"></span>
+            <span id="status-text" class="font-medium text-base text-gray-800">Checking...</span>
+          </div>
+          <div id="uptime" class="text-sm text-muted mb-3"></div>
+          <div id="qr"></div>
+          <div class="flex gap-2 mt-4 mb-6">
+            <button class="btn-danger flex-1 py-2 rounded text-white bg-error hover:bg-red-700 font-semibold transition" id="clear-session">
+              Clear Session
+            </button>
+          </div>
+          <hr class="my-6 border-t border-border"/>
+          <h3 class="text-lg font-semibold text-primary-dark mb-2">Send WhatsApp Message</h3>
+          <input type="text" id="phoneNumber" autocomplete="off" placeholder="Phone (e.g. 923001234567)"
+            class="mb-2 px-3 py-2 border border-border rounded w-full focus:outline-primary-dark"/>
+          <input type="text" id="message" autocomplete="off" placeholder="Message"
+            class="mb-2 px-3 py-2 border border-border rounded w-full focus:outline-primary-dark"/>
+          <input type="text" id="apiKey" autocomplete="off" placeholder="API Key"
+            class="mb-2 px-3 py-2 border border-border rounded w-full focus:outline-primary-dark"/>
+          <button class="w-full py-2 bg-primary text-white rounded font-semibold hover:bg-primary-dark transition" onclick="sendMessage()">Send</button>
+          <div id="result" class="mt-3 text-primary-dark text-sm min-h-[24px]"></div>
+        </section>
+        <!-- Auto-Responder Section -->
+        <section id="section-autoresponder" class="hidden">
+          <h2 class="text-xl font-semibold text-primary-dark mb-4">Auto-Responder</h2>
+          <div class="bg-gray-50 border border-border rounded-lg p-4 mb-5 max-h-72 overflow-y-auto">
+            <div id="ar-list" class="space-y-3"></div>
+            <div id="ar-empty" class="text-center text-muted text-sm py-2 hidden">No auto-responses set yet.</div>
+          </div>
+          <form class="space-y-2" onsubmit="addAutoResponder();return false;">
+            <input type="text" id="ar-q" placeholder="Question"
+              class="px-3 py-2 border border-border rounded w-full focus:outline-primary-dark"/>
+            <input type="text" id="ar-a" placeholder="Answer"
+              class="px-3 py-2 border border-border rounded w-full focus:outline-primary-dark"/>
+            <button type="submit" class="w-full py-2 bg-primary text-white rounded font-semibold hover:bg-primary-dark transition">Add</button>
+          </form>
+        </section>
+      </div>
+    </main>
+  </div>
+  <script>
+    // Sidebar toggle for mobile
+    const menuBarsBtn = document.getElementById('menuBarsBtn');
+    const sidebar = document.getElementById('sidebar');
+    const closeSidebarBtn = document.getElementById('closeSidebarBtn');
+    function openSidebar() {
+      sidebar.classList.remove('-left-64');
+      sidebar.classList.add('left-0');
+      document.body.style.overflow = 'hidden';
+      menuBarsBtn.classList.add('hidden');
+    }
+    function closeSidebar() {
+      sidebar.classList.add('-left-64');
+      sidebar.classList.remove('left-0');
+      document.body.style.overflow = '';
+      menuBarsBtn.classList.remove('hidden');
+    }
+    menuBarsBtn.addEventListener('click', openSidebar);
+    closeSidebarBtn.addEventListener('click', closeSidebar);
+    // Close sidebar when clicking outside on mobile
+    window.addEventListener('click', function(e) {
+      if(window.innerWidth < 768 &&
+         !sidebar.contains(e.target) &&
+         !menuBarsBtn.contains(e.target) &&
+         !sidebar.classList.contains('-left-64')) {
+        closeSidebar();
+      }
+    });
+
+    // Section Switching
+    function showSection(section) {
+      document.getElementById('section-connection').classList.toggle('hidden', section !== 'connection');
+      document.getElementById('section-autoresponder').classList.toggle('hidden', section !== 'autoresponder');
+      document.getElementById('nav-connection').classList.toggle('bg-primary/10', section === 'connection');
+      document.getElementById('nav-connection').classList.toggle('text-primary-dark', section === 'connection');
+      document.getElementById('nav-autoresponder').classList.toggle('bg-primary/10', section === 'autoresponder');
+      document.getElementById('nav-autoresponder').classList.toggle('text-primary-dark', section === 'autoresponder');
+      // On mobile, close sidebar after navigation
+      if(window.innerWidth < 768) closeSidebar();
+    }
+    // Default section
+    showSection('connection');
+
+    // WhatsApp Status & QR
+    const statusDot = document.getElementById('status-dot');
+    const statusText = document.getElementById('status-text');
+    const qrDiv = document.getElementById('qr');
+    const resultBox = document.getElementById('result');
+    const clearSessionBtn = document.getElementById('clear-session');
+    const uptimeDiv = document.getElementById('uptime');
+
+    async function loadStatus() {
+      try {
+        const res = await fetch('/status');
+        const { connected, uptime } = await res.json();
+        if (connected) {
+          statusText.textContent = "Connected to WhatsApp";
+          statusDot.className = "inline-block w-3 h-3 rounded-full bg-primary";
+          qrDiv.innerHTML = "";
+          if (uptime) {
+            uptimeDiv.textContent = "Uptime: " + uptime;
+            uptimeDiv.classList.remove("hidden");
+          } else {
+            uptimeDiv.classList.add("hidden");
+          }
+        } else {
+          statusText.textContent = "Not connected";
+          statusDot.className = "inline-block w-3 h-3 rounded-full bg-error";
+          uptimeDiv.classList.add("hidden");
+          // show QR
+          const qrRes = await fetch('/qr');
+          const qrData = await qrRes.text();
+          qrDiv.innerHTML = qrData.startsWith("data:")
+            ? `<img src="${qrData}" alt="Scan QR to Login" class="mx-auto my-3 rounded shadow border border-primary/10" style="max-width:250px"/>`
+            : `<p class="text-muted">${qrData}</p>`;
+        }
+      } catch {
+        statusText.textContent = "Status unavailable";
+        statusDot.className = "inline-block w-3 h-3 rounded-full bg-error";
+        uptimeDiv.classList.add("hidden");
+        qrDiv.innerHTML = `<p class="text-muted">Unable to fetch QR</p>`;
+      }
+    }
+
+    async function sendMessage() {
+      const phoneNumber = document.getElementById("phoneNumber").value.trim();
+      const message     = document.getElementById("message").value.trim();
+      const apiKey      = document.getElementById("apiKey").value.trim();
+
+      if (!phoneNumber || !message || !apiKey) {
+        resultBox.innerText = "⚠️ Please fill all fields.";
+        return;
+      }
+
+      resultBox.innerText = "Sending...";
+
+      try {
+        const res = await fetch('/send-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phoneNumber, message, apiKey })
+        });
+
+        const data = await res.json();
+        resultBox.innerText = data.message || "Unknown response";
+      } catch (err) {
+        resultBox.innerText = "❌ Failed to send message.";
+      }
+    }
+
+    clearSessionBtn.onclick = async () => {
+      if (!confirm('Clear WhatsApp session and remove QR?')) return;
+      await fetch('/clear-session');
+      loadStatus();
+      alert('Session cleared. Restart bot and scan QR to reconnect.');
+    };
+
+    setInterval(loadStatus, 5000);
+    loadStatus();
+
+    // --- Auto-Responder Frontend ---
+    async function loadAR() {
+      const res = await fetch('/autoresponder');
+      const pairs = await res.json();
+      const arList = document.getElementById('ar-list');
+      const arEmpty = document.getElementById('ar-empty');
+      arList.innerHTML = "";
+      if (!pairs.length) {
+        arEmpty.classList.remove("hidden");
+        return;
+      }
+      arEmpty.classList.add("hidden");
+      pairs.forEach((p, i) => {
+        // Each row: Q/A info left, Delete button right
+        const row = document.createElement("div");
+        row.className = "flex items-center border rounded-lg px-3 py-2 bg-white shadow-sm gap-3";
+        // QA block
+        const qa = document.createElement("div");
+        qa.className = "flex-1 min-w-0";
+        qa.innerHTML = `
+          <div class="font-semibold text-primary-dark text-base truncate" title="${escapeHtml(p.question)}">
+            Q: <span class="font-normal text-gray-900">${escapeHtml(p.question)}</span>
+          </div>
+          <div class="text-sm text-gray-600 mt-0.5 truncate" title="${escapeHtml(p.answer)}">
+            A: <span class="font-normal">${escapeHtml(p.answer)}</span>
+          </div>
+        `;
+        // Delete button
+        const del = document.createElement("button");
+        del.className = "ml-3 px-5 py-1.5 bg-error hover:bg-red-700 text-white font-medium rounded transition text-sm";
+        del.innerText = "Delete";
+        del.onclick = async () => {
+          await fetch('/autoresponder/' + i, { method: 'DELETE' });
+          loadAR();
+        };
+        row.appendChild(qa);
+        row.appendChild(del);
+        arList.appendChild(row);
+      });
+    }
+    async function addAutoResponder() {
+      const question = document.getElementById('ar-q').value.trim();
+      const answer = document.getElementById('ar-a').value.trim();
+      if (!question || !answer) return alert('Fill both fields');
+      await fetch('/autoresponder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, answer })
+      });
+      document.getElementById('ar-q').value = '';
+      document.getElementById('ar-a').value = '';
+      loadAR();
+    }
+    function escapeHtml(str) {
+      return (str + '').replace(/[&<>"']/g, function(m) {
+        return ({
+          '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        })[m];
+      });
+    }
+    loadAR();
+  </script>
+</body>
+</html>
