@@ -24,4 +24,17 @@ function removePair(index) {
   savePairs(pairs);
 }
 
-module.exports = { loadPairs, savePairs, addPair, removePair };
+function updatePair(index, question, answer) {
+  const pairs = loadPairs();
+  if (pairs[index]) {
+    pairs[index] = { question, answer };
+    savePairs(pairs);
+  }
+}
+
+function findPairInsensitive(txt) {
+  const pairs = loadPairs();
+  return pairs.find(p => p.question.trim().toLowerCase() === txt.trim().toLowerCase());
+}
+
+module.exports = { loadPairs, savePairs, addPair, removePair, updatePair, findPairInsensitive };

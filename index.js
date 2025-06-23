@@ -1,11 +1,10 @@
-// Improved WhatsApp Bot with Baileys, Express, and JSON-based Auto-Responder
-
-const {  
-  default: makeWASocket,  
-  useMultiFileAuthState,  
-  DisconnectReason,  
-  fetchLatestBaileysVersion  
-} = require("baileys");
+const {
+  makeWASocket,
+  useMultiFileAuthState,
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  proto
+} = require("@fizzxydev/baileys-pro");
 const express = require("express");
 const qrcode = require("qrcode");
 const fs = require("fs");
@@ -13,8 +12,8 @@ const path = require("path");
 const axios = require("axios");
 const https = require("https");
 
-// --- Auto-Responder Storage ---
 const responder = require("./autoresponder");
+const buttonResponder = require("./buttonresponder");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -28,7 +27,6 @@ let heartbeatInterval = null;
 const SESSION_ID = "session1";
 const authDir = path.join(__dirname, "storage", `auth_info_${SESSION_ID}`);
 
-// Uptime tracking
 let connectedAt = null;
 function getUptime() {
   if (!connectedAt) return null;
@@ -45,16 +43,13 @@ function getUptime() {
   );
 }
 
-// Ensure auth directory exists
 if (!fs.existsSync(authDir)) {
   fs.mkdirSync(authDir, { recursive: true });
 }
 
-// Global error handlers
 process.on("uncaughtException", err => console.error("Uncaught Exception:", err));
 process.on("unhandledRejection", reason => console.error("Unhandled Rejection:", reason));
 
-// WhatsApp connection/init
 async function initializeBot() {
   if (presenceInterval) clearInterval(presenceInterval);
   if (heartbeatInterval) clearInterval(heartbeatInterval);
@@ -70,19 +65,57 @@ async function initializeBot() {
       keepAliveIntervalMs: 60_000,
     });
 
-    // Handle incoming messages
+    // Handle incoming text messages
     sock.ev.on("messages.upsert", async ({ messages }) => {
       const msg = messages[0];
-      if (!msg.message?.conversation || msg.key.fromMe) return;
+      if (!msg.message || msg.key.fromMe) return;
       const from = msg.key.remoteJid;
-      const txt = msg.message.conversation.trim();
+      let txt = "";
+      if (msg.message.conversation) txt = msg.message.conversation.trim();
+      else if (msg.message.extendedTextMessage && msg.message.extendedTextMessage.text) txt = msg.message.extendedTextMessage.text.trim();
+      else return;
 
-      // --- AUTO-RESPONDER ---
-      const autores = responder.loadPairs();
-      const found = autores.find(p => p.question.toLowerCase() === txt.toLowerCase());
+      // --- BUTTON RESPONDER (case-insensitive) ---
+      const { idx: btnIdx, entry: btnPair } = buttonResponder.findButtonInsensitive(txt);
+      if (btnPair) {
+        // Use Baileys button format (buttonsMessage, not newType)
+        const buttons = btnPair.buttons.slice(0, 3).map((b, j) => ({
+          buttonId: `btn_${btnIdx}_${j}`,
+          buttonText: { displayText: b.label },
+          type: 1
+        }));
+
+        const buttonMsg = {
+          text: "Choose an option:",
+          buttons,
+          headerType: 1
+        };
+        await sock.sendMessage(from, buttonMsg, { quoted: msg });
+        return;
+      }
+
+      // --- AUTO-RESPONDER (case-insensitive) ---
+      const found = responder.findPairInsensitive(txt);
       if (found) {
         await sock.sendMessage(from, { text: found.answer }, { quoted: msg });
         return;
+      }
+    });
+
+    // Handle button reply for ButtonResponder (case-insensitive)
+    sock.ev.on("messages.upsert", async ({ messages }) => {
+      const msg = messages[0];
+      if (!msg.message || msg.key.fromMe) return;
+      if (!msg.message.buttonsResponseMessage) return;
+      const from = msg.key.remoteJid;
+      const btnId = msg.message.buttonsResponseMessage.selectedButtonId;
+      const m = btnId.match(/^btn_(\d+)_(\d+)$/);
+      if (!m) return;
+      const [ , pairIdx, btnIdx ] = m.map(Number);
+      const buttonPairs = buttonResponder.loadButtons();
+      const reply = buttonPairs?.[pairIdx]?.buttons?.[btnIdx]?.reply;
+      if (reply) {
+        await sock.sendMessage(from, { text: reply }, { quoted: msg });
       }
     });
 
@@ -131,7 +164,6 @@ async function initializeBot() {
   }
 }
 
-// Health-check
 setInterval(() => {
   if (!sock?.user) {
     initializeBot();
@@ -214,6 +246,41 @@ app.post('/autoresponder', (req, res) => {
 });
 app.delete('/autoresponder/:index', (req, res) => {
   responder.removePair(Number(req.params.index));
+  res.json({ status: true });
+});
+app.put('/autoresponder/:index', (req, res) => {
+  const { question, answer } = req.body;
+  if (!question || !answer) return res.status(400).json({ status: false, message: "Missing data" });
+  responder.updatePair(Number(req.params.index), question.trim(), answer.trim());
+  res.json({ status: true });
+});
+
+// ---- BUTTON RESPONDER ENDPOINTS ----
+app.get('/buttonresponder', (req, res) => {
+  res.json(buttonResponder.loadButtons());
+});
+app.post('/buttonresponder', (req, res) => {
+  const { question, buttons } = req.body;
+  if (!question || !buttons || !Array.isArray(buttons) || buttons.length === 0)
+    return res.status(400).json({ status: false, message: "Missing or invalid data" });
+  buttonResponder.addButton(question.trim(), buttons.map(b => ({
+    label: b.label.trim(),
+    reply: b.reply.trim()
+  })));
+  res.json({ status: true });
+});
+app.delete('/buttonresponder/:index', (req, res) => {
+  buttonResponder.removeButton(Number(req.params.index));
+  res.json({ status: true });
+});
+app.put('/buttonresponder/:index', (req, res) => {
+  const { question, buttons } = req.body;
+  if (!question || !buttons || !Array.isArray(buttons) || buttons.length === 0)
+    return res.status(400).json({ status: false, message: "Missing or invalid data" });
+  buttonResponder.updateButton(Number(req.params.index), question.trim(), buttons.map(b => ({
+    label: b.label.trim(),
+    reply: b.reply.trim()
+  })));
   res.json({ status: true });
 });
 
